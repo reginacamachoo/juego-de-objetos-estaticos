@@ -274,7 +274,16 @@
           this.roto = true;
           BLANCOS_ROTOS++;
           actualizarMarcador();
-          if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
+
+          // OJO: NO se puede borrar el objeto aquí adentro.
+          // Estamos dentro del choque y el motor de física todavía tiene
+          // este cuerpo en su lista; si desaparece a media cuenta, la
+          // escena se congela. setTimeout(..., 0) lo deja para el instante
+          // siguiente, cuando el choque ya terminó.
+          setTimeout(() => {
+            this.el.removeAttribute('static-body');   // primero el cuerpo físico
+            if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
+          }, 0);
         });
       }
     });
