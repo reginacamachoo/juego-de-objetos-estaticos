@@ -60,6 +60,7 @@
         pelota.setAttribute('radius', 0.15);
         pelota.setAttribute('color', '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'));
         pelota.setAttribute('position', inicio);
+        pelota.setAttribute('proyectil', '');   // AGREGADO POR REGGIE: etiqueta para el juego de blancos
         pelota.setAttribute('dynamic-body', `mass: ${this.data.masa}; shape: sphere; sphereRadius: 0.15`);
 
         // Cuando el cuerpo físico ya existe, le damos velocidad inicial (v = dir * rapidez)
@@ -140,64 +141,144 @@
 
     /*
       COMPONENTE "laberinto"  (AGREGADO POR REGGIE)
-      Construye un laberinto a partir de un MAPA de texto.
-        '#' = pared    '.' = paso
-      Cada '#' se convierte en un <a-box static-body>, o sea una pared real
-      que no se mueve y que no puedes atravesar.
+      Construye todo el laberinto a partir de un MAPA de texto:
+        '#' = pared     '.' = paso     '*' = blanco     'S' = salida
+      Para cambiarlo NO se toca el código: se escriben caracteres en el MAPA.
 
-      La gracia: para cambiar el laberinto NO se toca el código, solo se
-      escriben caracteres en el MAPA de abajo. Es la misma idea que el
-      componente de estrellas del sistema solar: generar muchos objetos
-      con una regla, en vez de escribirlos uno por uno.
+      Las paredes salen DELGADAS: para cada '#' el componente mira a sus
+      vecinos y decide si el muro corre en horizontal o en vertical, y lo
+      hace fino en el eje contrario.
+
+      El color sale de la posición, así que el laberinto queda en degradado
+      en vez de todo gris.
     */
     const MAPA = [
-      '#############',
-      '#.......#...#',
+      '##S##########',
+      '#*......#...#',
       '######..#.#.#',
       '#.......#.#.#',
       '#.#######.#.#',
-      '#.#.....#.#.#',
+      '#.#*....#.#.#',
       '#.###.#.#.#.#',
       '#.........#.#',
       '#####...###.#',
-      '#...#.......#',
+      '#..*#.......#',
       '#.###.#######',
-      '#...........#',
+      '#..........*#',
       '#############',
     ];
 
     AFRAME.registerComponent('laberinto', {
       schema: {
-        celda: { type: 'number', default: 1.538 },  // metros por casilla
-        alto:  { type: 'number', default: 2 },      // altura de las paredes
-        color: { type: 'color',  default: '#B0A58F' }
+        celda:  { type: 'number', default: 1.538 },  // metros por casilla
+        alto:   { type: 'number', default: 2 },      // altura de las paredes
+        grosor: { type: 'number', default: 0.25 }    // qué tan delgadas
       },
 
       init: function () {
         const d = this.data;
-        const filas = MAPA.length;
-        const cols  = MAPA[0].length;
+        const filas = MAPA.length, cols = MAPA[0].length;
+        const esPared = (f, c) =>
+          f >= 0 && f < filas && c >= 0 && c < cols && MAPA[f][c] === '#';
 
         for (let f = 0; f < filas; f++) {
           for (let c = 0; c < cols; c++) {
-            if (MAPA[f][c] !== '#') continue;
-
-            // La rejilla queda centrada en el origen del mundo
+            const ch = MAPA[f][c];
             const x = (c - (cols - 1) / 2) * d.celda;
             const z = (f - (filas - 1) / 2) * d.celda;
 
-            const muro = document.createElement('a-box');
-            muro.setAttribute('static-body', '');
-            muro.setAttribute('position', x + ' ' + (d.alto / 2) + ' ' + z);
-            muro.setAttribute('width',  d.celda);
-            muro.setAttribute('depth',  d.celda);
-            muro.setAttribute('height', d.alto);
-            muro.setAttribute('color',  d.color);
-            this.el.appendChild(muro);
+            // color en degradado según dónde esté la casilla
+            const tono = Math.round((c / cols) * 160 + (f / filas) * 140) % 360;
+            const color = 'hsl(' + tono + ', 62%, 58%)';
+
+            if (ch === '#') {
+              const horiz = esPared(f, c - 1) || esPared(f, c + 1);
+              const vert  = esPared(f - 1, c) || esPared(f + 1, c);
+              // si no tiene vecinos es un poste suelto
+              if (horiz || !vert) this.muro(x, z, d.celda, d.grosor, color);
+              if (vert)           this.muro(x, z, d.grosor, d.celda, color);
+            }
+
+            if (ch === '*') this.blanco(x, z);
+            if (ch === 'S') this.salida(x, z, d.celda);
           }
         }
+        setTimeout(actualizarMarcador, 0);
+      },
+
+      muro: function (x, z, ancho, fondo, color) {
+        const m = document.createElement('a-box');
+        m.setAttribute('static-body', '');
+        m.setAttribute('position', x + ' ' + (this.data.alto / 2) + ' ' + z);
+        m.setAttribute('width', ancho);
+        m.setAttribute('depth', fondo);
+        m.setAttribute('height', this.data.alto);
+        m.setAttribute('color', color);
+        this.el.appendChild(m);
+      },
+
+      blanco: function (x, z) {
+        const b = document.createElement('a-icosahedron');
+        b.setAttribute('radius', 0.35);
+        b.setAttribute('position', x + ' 1 ' + z);
+        b.setAttribute('color', '#FFD93D');
+        b.setAttribute('static-body', 'shape: sphere; sphereRadius: 0.35');
+        b.setAttribute('blanco', '');
+        b.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear');
+        this.el.appendChild(b);
+      },
+
+      salida: function (x, z, celda) {
+        const s = document.createElement('a-box');
+        s.setAttribute('position', x + ' 0.02 ' + z);
+        s.setAttribute('width', celda);
+        s.setAttribute('depth', celda);
+        s.setAttribute('height', 0.04);
+        s.setAttribute('color', '#2ECC71');
+        this.el.appendChild(s);
+        const t = document.createElement('a-text');
+        t.setAttribute('value', 'SALIDA');
+        t.setAttribute('position', x + ' 1.6 ' + z);
+        t.setAttribute('rotation', '0 180 0');
+        t.setAttribute('align', 'center');
+        t.setAttribute('color', '#2ECC71');
+        t.setAttribute('width', 6);
+        this.el.appendChild(t);
       }
     });
+
+    /*
+      COMPONENTE "blanco"  (AGREGADO POR REGGIE)
+      Un objetivo que desaparece cuando lo golpea un proyectil.
+      Usa el evento "collide" de la física, el mismo que el profe mostró
+      en reporte-choque — pero aquí además revisa QUIÉN lo golpeó, para
+      que no cuente si lo empujas con el cuerpo.
+    */
+    let BLANCOS_TOTAL = 0, BLANCOS_ROTOS = 0;
+
+    function actualizarMarcador () {
+      const t = document.getElementById('marcador');
+      if (!t) return;
+      t.setAttribute('value', BLANCOS_ROTOS >= BLANCOS_TOTAL && BLANCOS_TOTAL > 0
+        ? 'GANASTE   ' + BLANCOS_ROTOS + ' / ' + BLANCOS_TOTAL
+        : 'Blancos   ' + BLANCOS_ROTOS + ' / ' + BLANCOS_TOTAL);
+    }
+
+    AFRAME.registerComponent('blanco', {
+      init: function () {
+        BLANCOS_TOTAL++;
+        this.el.addEventListener('collide', (e) => {
+          const otro = e.detail.body && e.detail.body.el;
+          if (!otro || !otro.hasAttribute('proyectil')) return;  // solo diamantes
+          if (this.roto) return;                                 // una sola vez
+          this.roto = true;
+          BLANCOS_ROTOS++;
+          actualizarMarcador();
+          if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
+        });
+      }
+    });
+
   </script>
 </head>
 
@@ -219,12 +300,6 @@
     <!-- PISO: estático. Se usa una caja delgada (más estable que un plano). -->
     <a-box static-body position="0 -0.05 0" width="20" height="0.1" depth="20" color="#7BC8A4"></a-box>
 
-    <!-- RAMPA: estática e inclinada 20° -->
-    <a-box static-body position="-3 0.6 -4" rotation="0 0 -20" width="4" height="0.1" depth="1.5" color="#8D6E63"></a-box>
-
-    <!-- Pelota que rueda por la rampa (dinámica) -->
-    <a-sphere dynamic-body="mass: 2" position="-4.5 2.5 -4" radius="0.3" color="#FFC65D"></a-sphere>
-
     <!-- TORRE de cajas dinámicas: blanco para las pelotas -->
     <a-box dynamic-body="mass: 1" reporte-choque position="2 0.25 -5" width="0.5" height="0.5" depth="0.5" color="#4CC3D9"></a-box>
     <a-box dynamic-body="mass: 1" reporte-choque position="2 0.75 -5" width="0.5" height="0.5" depth="0.5" color="#4CC3D9"></a-box>
@@ -245,9 +320,6 @@
          El componente lee el MAPA de arriba y crea las 93 paredes. -->
     <a-entity laberinto></a-entity>
 
-    <!-- PARED: estática, el jugador no la puede atravesar -->
-    <a-box static-body position="-2 1 0" width="0.2" height="2" depth="4" color="#999"></a-box>
-
     <!-- JUGADOR: cuerpo físico (esfera invisible de 0.4 m en los pies).
          Masa 60 kg → empuja fácil las cajas de 1 kg. -->
     <a-entity id="rig" position="0 0.4 3"
@@ -255,7 +327,12 @@
               jugador-fisico="velocidad: 4">
       <!-- Cámara SIN wasd-controls (si no, atraviesa todo). En la compu lanza con ESPACIO -->
       <a-entity camera look-controls position="0 1.2 0"
-                lanzador="velocidad: 10; masa: 1"></a-entity>
+                lanzador="velocidad: 10; masa: 1">
+        <!-- MARCADOR (AGREGADO POR REGGIE): va dentro de la cámara,
+             así te sigue siempre a la vista -->
+        <a-text id="marcador" value="Blancos   0 / 0" align="center"
+                position="0 0.42 -1" width="2.2" color="#FFD93D"></a-text>
+      </a-entity>
 
       <!-- Controles del Quest: lanzan con el gatillo -->
       <a-entity laser-controls="hand: right" lanzador="velocidad: 10"></a-entity>
