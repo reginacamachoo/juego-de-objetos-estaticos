@@ -302,9 +302,9 @@
   <a-scene physics="gravity: -9.8; restitution: 0.4; friction: 0.1; debug: true">
 
     <!-- Ambiente -->
-    <a-sky color="#BFE3F2"></a-sky>
-    <a-light type="ambient" intensity="0.6"></a-light>
-    <a-light type="directional" intensity="0.8" position="2 4 2"></a-light>
+    <a-sky color="#E8744A"></a-sky>   <!-- MODIFICADO POR REGGIE: era #BFE3F2 (cielo de dia) -->
+    <a-light type="ambient" color="#4A3B5C" intensity="0.7"></a-light>   <!-- MODIFICADO POR REGGIE: morado tenue, el lado sin sol -->
+    <a-light type="directional" color="#FFB07A" intensity="1.1" position="-6 1.5 -4"></a-light>   <!-- MODIFICADO POR REGGIE: naranja y baja, como sol poniente -->
 
     <!-- PISO: estático. Se usa una caja delgada (más estable que un plano). -->
     <a-box static-body position="0 -0.05 0" width="20" height="0.1" depth="20" color="#7BC8A4"></a-box>
